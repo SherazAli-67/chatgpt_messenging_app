@@ -10,7 +10,6 @@ import 'package:messenger_type_app/src/presentation/messages_page/messages_item_
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:record/record.dart';
 
 class SpeechSampleApp extends StatefulWidget {
   const SpeechSampleApp({Key? key}) : super(key: key);
@@ -20,10 +19,9 @@ class SpeechSampleApp extends StatefulWidget {
 }
 
 class _SpeechSampleAppState extends State<SpeechSampleApp> {
-  bool _hasSpeech = false;
+
   final _logEvents = false;
   final _onDevice = false;
-  double level = 0.0;
   double minSoundLevel = 50000;
   double maxSoundLevel = -50000;
   String lastWords = '';
@@ -39,11 +37,7 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
 
   late ScrollController scrollController;
 
-  bool isListening = false;
-  bool isTextMessage = false;
-  bool isVoiceMessage = false;
 
-  late Record record;
   @override
   void initState() {
     super.initState();
@@ -52,7 +46,6 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
       scrollController.jumpTo(scrollController.position.maxScrollExtent);
     });
     initSpeechState();
-
   }
 
   @override
@@ -92,20 +85,22 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
                   : ListView.builder(
                 controller: scrollController,
                   itemCount: messagesController.messagesList.value.length,
-                  itemBuilder: (ctx, index)=> MessagesItemWidget(message: messagesController.messagesList.value[index])))),
-        SpeechControlWidget(
-            _hasSpeech,
-            isListening,
-            startListening,
-            stopListening,
-            cancelListening,
-            textEditingController,
-            focusNode,
-            messagesController,
-          isTextMessage,
-          isVoiceMessage,
-          onSendMessageClick,
-          onTextChange,
+                  itemBuilder: (ctx, index)=> MessagesItemWidget(message: messagesController.messagesList.value[index], controller: messagesController,)))),
+          Obx(()=> SpeechControlWidget(
+              messagesController.hasSpeech.value,
+              messagesController.isListening.value,
+              messagesController.startRecording,
+              stopRecording,
+              cancelListening,
+              textEditingController,
+              focusNode,
+              messagesController,
+          messagesController.isTextMessage.value,
+          messagesController.isVoiceMessage.value,
+            onSendMessageClick,
+            onTextChange,
+            jumpToLastMessage,
+          ),
         ),
       ]),
     );
@@ -130,23 +125,17 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
         _currentLocaleId = systemLocale?.localeId ?? '';
       }
       if (!mounted) return;
+      messagesController.hasSpeech.value = hasSpeech;
 
-      setState(() {
-        _hasSpeech = hasSpeech;
-      });
     } catch (e) {
-      setState(() {
-        lastError = 'Speech recognition failed: ${e.toString()}';
-        _hasSpeech = false;
-      });
+      lastError = 'Speech recognition failed: ${e.toString()}';
+      messagesController.hasSpeech.value = false;
     }
   }
-
 
   // This is called each time the users wants to start a new speech
   // recognition session
   void startListening() {
-    _initRecording();
     lastWords = '';
     lastError = '';
     speech.listen(
@@ -161,11 +150,10 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
       onDevice: _onDevice,
     );
 
-    setState(() {
-      isListening = true;
-      isVoiceMessage = true;
-      isTextMessage = false;
-    });
+      messagesController.isListening.value = true;
+      messagesController.isVoiceMessage.value = true;
+      messagesController.isTextMessage.value = false;
+
 
 
   }
@@ -177,24 +165,24 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
     String message = textEditingController.text.trim();
     textEditingController.clear();
 
+      messagesController.level.value = 0.0;
+      messagesController.isListening.value = false;
+      messagesController.isTextMessage.value = false;
+      messagesController.isVoiceMessage.value = false;
 
-    setState(() {
-      level = 0.0;
-      isListening = false;
-      isTextMessage = false;
-      isVoiceMessage = false;
-    });
     messagesController.insertMessage(message, false, '');
     Timer(const Duration(milliseconds: 500), () => scrollController.jumpTo(scrollController.position.maxScrollExtent));
   }
 
-
   void cancelListening() {
     _logEvent('cancel');
     speech.cancel();
-    setState(() {
-      level = 0.0;
-    });
+    messagesController.level.value = 0.0;
+  }
+
+  void stopRecording() async{
+    await messagesController.stopRecording();
+    jumpToLastMessage();
   }
   void resultListener(SpeechRecognitionResult result) {
     _logEvent('Result listener final: ${result.finalResult}, words: ${result.recognizedWords}');
@@ -216,13 +204,10 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
   void onSendMessageClick(){
     if(textEditingController.text.trim().isNotEmpty){
       messagesController.insertMessage(textEditingController.text.trim(), false, '');
-      Timer(const Duration(milliseconds: 500), () => scrollController.jumpTo(scrollController.position.maxScrollExtent));
+     jumpToLastMessage();
       textEditingController.clear();
-      debugPrint('Text Cleared');
-      setState(() {
-        isTextMessage = false;
-        isVoiceMessage = false;
-      });
+      messagesController.isTextMessage.value = false;
+      messagesController.isVoiceMessage.value = false;
     }
 
   }
@@ -230,9 +215,8 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
     minSoundLevel = min(minSoundLevel, level);
     maxSoundLevel = max(maxSoundLevel, level);
     // _logEvent('sound level $level: $minSoundLevel - $maxSoundLevel ');
-    setState(() {
-      this.level = level;
-    });
+    messagesController.level.value = level;
+
   }
 
   void errorListener(SpeechRecognitionError error) {
@@ -261,28 +245,12 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
 
 
   void onTextChange(val){
-    setState(() {
-      isTextMessage = true;
-      isVoiceMessage = false;
-    });
+      messagesController.isTextMessage.value = true;
+      messagesController.isVoiceMessage.value = false;
   }
 
-  void _initRecording() async{
-    /*
-    Map<Permission, PermissionStatus> permissions = await [
-
-    Permission.microphone,].request();
-    //
-    bool permissionsGranted = permissions[Permission.microphone]!.isGranted;
-
-    if (permissionsGranted) {
-    await record.start();
-    debugPrint('Recording Started');
-    } else {
-    debugPrint('Permissions not granted');
-    }
-
-     */
+  void jumpToLastMessage(){
+    Timer(const Duration(milliseconds: 500), () => scrollController.jumpTo(scrollController.position.maxScrollExtent));
   }
 }
 
@@ -290,20 +258,21 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
 /// Controls to start and stop speech recognition
 class SpeechControlWidget extends StatelessWidget {
   const SpeechControlWidget(this.hasSpeech, this.isListening,
-      this.startListening, this.stopListening, this.cancelListening,
+      this.startRecording, this.stopRecording, this.cancelListening,
       this.textEditingController, this.focusNode,
       this.messagesController,
       this.isTextMessage,
       this.isVoiceMessage,
       this.onSendMessageClick,
       this.onTextChange,
+      this.jumpToLastMessage,
       {Key? key})
       : super(key: key);
 
   final bool hasSpeech;
   final bool isListening;
-  final void Function() startListening;
-  final void Function() stopListening;
+  final void Function() startRecording;
+  final void Function() stopRecording;
   final void Function() cancelListening;
   final TextEditingController textEditingController;
   final FocusNode focusNode;
@@ -312,6 +281,7 @@ class SpeechControlWidget extends StatelessWidget {
   final bool isVoiceMessage;
   final void Function() onSendMessageClick;
   final void Function(String x) onTextChange;
+  final void Function() jumpToLastMessage;
   @override
   Widget build(BuildContext context) {
     return  Padding(
@@ -331,7 +301,7 @@ class SpeechControlWidget extends StatelessWidget {
                   if(val.isNotEmpty){
                     messagesController.insertMessage(val, false, '');
                     textEditingController.clear();
-
+                   jumpToLastMessage();
                   }
                 },
                 onTapOutside: (event) => focusNode.unfocus(),
@@ -350,7 +320,7 @@ class SpeechControlWidget extends StatelessWidget {
               child: Image.asset(icSend),
             ),
           ): GestureDetector(
-            onTap: !hasSpeech || isListening ? stopListening : startListening,
+            onTap: !hasSpeech || isListening ? stopRecording : startRecording,
             child:  SizedBox(
                 width: 50,
                 height: 50,

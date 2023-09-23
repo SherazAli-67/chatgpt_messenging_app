@@ -11,4 +11,5 @@ class Messages {
   String path;
 
   Messages({required this.id, required this.message, required this.userID, required this.dateTime, required this.isVoiceMessage, required this.path});
+
 }
