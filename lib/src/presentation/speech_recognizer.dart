@@ -20,6 +20,14 @@ class SpeechSampleApp extends StatefulWidget {
 
 class _SpeechSampleAppState extends State<SpeechSampleApp> {
 
+  final SpeechToText speech = SpeechToText();
+
+  TextEditingController textEditingController = TextEditingController();
+  FocusNode focusNode = FocusNode();
+  MessagesController messagesController = Get.put(MessagesController());
+
+  late ScrollController scrollController;
+
   final _logEvents = false;
   final _onDevice = false;
   double minSoundLevel = 50000;
@@ -29,14 +37,6 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
   String lastStatus = '';
   String _currentLocaleId = '';
   List<LocaleName> _localeNames = [];
-  final SpeechToText speech = SpeechToText();
-
-  TextEditingController textEditingController = TextEditingController();
-  FocusNode focusNode = FocusNode();
-  MessagesController messagesController = Get.put(MessagesController());
-
-  late ScrollController scrollController;
-
 
   @override
   void initState() {
@@ -89,8 +89,8 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
           Obx(()=> SpeechControlWidget(
               messagesController.hasSpeech.value,
               messagesController.isListening.value,
-              messagesController.startRecording,
-              stopRecording,
+              startListening,
+              stopListening,
               cancelListening,
               textEditingController,
               focusNode,
@@ -149,13 +149,11 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
       listenMode: ListenMode.confirmation,
       onDevice: _onDevice,
     );
-
       messagesController.isListening.value = true;
       messagesController.isVoiceMessage.value = true;
       messagesController.isTextMessage.value = false;
 
-
-
+      messagesController.startRecording();
   }
 
   void stopListening() async{
@@ -170,6 +168,10 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
       messagesController.isTextMessage.value = false;
       messagesController.isVoiceMessage.value = false;
 
+      await stopRecording();
+      setState(() {
+
+      });
     messagesController.insertMessage(message, false, '');
     Timer(const Duration(milliseconds: 500), () => scrollController.jumpTo(scrollController.position.maxScrollExtent));
   }
@@ -180,7 +182,7 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
     messagesController.level.value = 0.0;
   }
 
-  void stopRecording() async{
+  Future<void> stopRecording() async{
     await messagesController.stopRecording();
     jumpToLastMessage();
   }
@@ -208,6 +210,9 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
       textEditingController.clear();
       messagesController.isTextMessage.value = false;
       messagesController.isVoiceMessage.value = false;
+      setState(() {
+
+      });
     }
 
   }

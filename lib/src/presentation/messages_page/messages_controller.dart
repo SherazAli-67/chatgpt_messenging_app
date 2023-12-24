@@ -24,12 +24,15 @@ class MessagesController extends GetxController{
   RxBool isAudioPlaying = false.obs;
 
   var recordedPath = ''.obs;
+
+
+
+
   @override
   void onInit() {
     super.onInit();
     record = Record();
     audioPlayer = AudioPlayer();
-
     _refreshList();
   }
 
